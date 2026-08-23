@@ -541,8 +541,8 @@ def generate_word_report(
     p_ve = doc.add_paragraph()
     format_paragraph(p_ve)
     p_ve.add_run(
-        "Four dedicated visualizations were generated to analyze model decision behavior, "
-        "multiclass separation, calibration, and feature attribution. Each figure is displayed below with its technical interpretation."
+        "Four dedicated visualizations were generated to analyze classification errors, "
+        "cross-model performance, multiclass discrimination, and feature attribution. Each figure is displayed below with its technical interpretation."
     )
     
     # Helper to center image
