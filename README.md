@@ -68,6 +68,8 @@ week4-machine-learning-model-development/
 │       ├── confusion_matrix_logistic_regression.csv
 │       ├── confusion_matrix_random_forest.csv
 │       ├── confusion_matrix_decision_tree.csv
+│       ├── feature_importances_random_forest.csv
+│       ├── misclassified_decision_tree.csv
 │       └── misclassified_logistic_regression.csv
 │
 ├── report/
@@ -102,10 +104,12 @@ week4-machine-learning-model-development/
 4. **Multiclass Evaluation:**
    - Computes Accuracy, Macro/Weighted Precision, Macro/Weighted Recall, Macro/Weighted F1-Score, and One-vs-Rest (OvR) ROC AUC.
    - Generates confusion matrices and per-class classification reports.
+   - Clarifies that perfect ROC-AUC (1.0000) for Logistic Regression indicates correct probability ranking across thresholds, while the single classification error at the default threshold resulted in 97.22% accuracy.
 5. **Error & Generalization Analysis:**
    - Inspects misclassifications, class boundaries, and empirical generalization gaps ($\Delta = \text{Train Acc} - \text{Test Acc}$).
+   - Employs scientifically cautious wording regarding single-split generalization.
 6. **Publication Figures & Word Report Generation:**
-   - Automatically renders 300 DPI figures and compiles the full academic DOCX report dynamically.
+   - Automatically renders 300 DPI figures and compiles the full academic DOCX report dynamically with all numerical results populated from computed metrics.
 
 ---
 
@@ -115,7 +119,7 @@ week4-machine-learning-model-development/
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **Random Forest (Champion)** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **1.0000** | **0.00%** |
 | **Logistic Regression (Baseline)** | 1.0000 | 0.9722 | 0.9778 | 0.9667 | 0.9710 | 0.9720 | 1.0000 | +2.78% |
-| **Decision Tree (Single Tree)** | 0.9930 | 0.9444 | 0.9583 | 0.9389 | 0.9457 | 0.9450 | 0.9493 | +4.85% |
+| **Decision Tree (Single Tree)** | 0.9930 | 0.9444 | 0.9583 | 0.9389 | 0.9457 | 0.9450 | 0.9493 | +4.86% |
 
 ---
 

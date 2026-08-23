@@ -10,7 +10,12 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.data_loader import load_raw_wine_data, inspect_data, save_dataset
 from src.data_preprocessing import prepare_train_test_split
 from src.model_training import initialize_candidate_models, train_models
-from src.model_evaluation import evaluate_all_models, extract_misclassifications, save_tables
+from src.model_evaluation import (
+    evaluate_all_models,
+    extract_misclassifications,
+    extract_feature_importances,
+    save_tables
+)
 from src.visualizations import (
     plot_confusion_matrix,
     plot_model_comparison,
@@ -84,6 +89,12 @@ def run_pipeline() -> None:
     print("\n--- Summary Performance Metrics ---")
     print(summary_df.to_string(index=False))
     
+    # Extract feature importances
+    feature_importance_df = extract_feature_importances(
+        trained_models["Random Forest"],
+        metadata["feature_names"]
+    )
+    
     # Extract misclassifications for error analysis
     lr_errors = extract_misclassifications(
         trained_models["Logistic Regression"],
@@ -117,6 +128,8 @@ def run_pipeline() -> None:
         evaluation_results=evaluation_results,
         output_dir=outputs_tables_dir
     )
+    if not feature_importance_df.empty:
+        feature_importance_df.to_csv(outputs_tables_dir / "feature_importances_random_forest.csv", index=False)
     if not lr_errors.empty:
         lr_errors.to_csv(outputs_tables_dir / "misclassified_logistic_regression.csv")
     if not dt_errors.empty:
@@ -179,6 +192,7 @@ def run_pipeline() -> None:
         summary_df=summary_df,
         evaluation_results=evaluation_results,
         misclassified_df=lr_errors,
+        feature_importance_df=feature_importance_df,
         figures_paths=figures_paths,
         output_path=report_docx_path
     )

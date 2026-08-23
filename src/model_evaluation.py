@@ -40,8 +40,8 @@ def evaluate_single_model(
     f1_weighted = float(f1_score(y_test, y_pred_test, average="weighted", zero_division=0))
     
     train_f1_macro = float(f1_score(y_train, y_pred_train, average="macro", zero_division=0))
-    generalization_gap_acc = float(train_acc - test_acc)
-    generalization_gap_f1 = float(train_f1_macro - f1_macro)
+    generalization_gap_acc = float(round(train_acc, 4) - round(test_acc, 4))
+    generalization_gap_f1 = float(round(train_f1_macro, 4) - round(f1_macro, 4))
     
     cm = confusion_matrix(y_test, y_pred_test)
     
@@ -130,6 +130,21 @@ def evaluate_all_models(
         
     summary_df = pd.DataFrame(summary_rows)
     return evaluation_results, summary_df
+
+
+def extract_feature_importances(
+    pipeline: Pipeline,
+    feature_names: List[str]
+) -> pd.DataFrame:
+    classifier = pipeline.named_steps.get("classifier", pipeline)
+    if hasattr(classifier, "feature_importances_"):
+        importances = classifier.feature_importances_
+        feat_df = pd.DataFrame({
+            "Feature": feature_names,
+            "Importance": importances
+        }).sort_values("Importance", ascending=False).reset_index(drop=True)
+        return feat_df
+    return pd.DataFrame()
 
 
 def extract_misclassifications(

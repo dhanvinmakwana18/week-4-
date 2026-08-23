@@ -69,7 +69,7 @@ def add_custom_heading(doc, text: str, level: int) -> Any:
     return p
 
 
-def add_callout(doc, text: str, title: str = "KEY FINDING") -> None:
+def add_callout(doc, text: str, title: str = "SUMMARY TAKEAWAY") -> None:
     tbl = doc.add_table(rows=1, cols=1)
     tbl.alignment = WD_TABLE_ALIGNMENT.CENTER
     tbl.autofit = False
@@ -200,6 +200,7 @@ def generate_word_report(
     summary_df: pd.DataFrame,
     evaluation_results: Dict[str, Dict[str, Any]],
     misclassified_df: pd.DataFrame,
+    feature_importance_df: pd.DataFrame,
     figures_paths: Dict[str, Path],
     output_path: Path
 ) -> None:
@@ -213,6 +214,48 @@ def generate_word_report(
         section.left_margin = Inches(1.0)
         section.right_margin = Inches(1.0)
         
+    # Extract dynamic values from evaluation results
+    lr_train_acc = evaluation_results["Logistic Regression"]["train_accuracy"]
+    lr_test_acc = evaluation_results["Logistic Regression"]["test_accuracy"]
+    lr_f1 = evaluation_results["Logistic Regression"]["f1_macro"]
+    lr_f1_weighted = evaluation_results["Logistic Regression"]["f1_weighted"]
+    lr_roc_auc = evaluation_results["Logistic Regression"]["roc_auc_ovr_macro"]
+    lr_gap = evaluation_results["Logistic Regression"]["generalization_gap_accuracy"]
+    lr_train_f1 = evaluation_results["Logistic Regression"]["train_f1_macro"]
+    
+    rf_train_acc = evaluation_results["Random Forest"]["train_accuracy"]
+    rf_test_acc = evaluation_results["Random Forest"]["test_accuracy"]
+    rf_f1 = evaluation_results["Random Forest"]["f1_macro"]
+    rf_f1_weighted = evaluation_results["Random Forest"]["f1_weighted"]
+    rf_roc_auc = evaluation_results["Random Forest"]["roc_auc_ovr_macro"]
+    rf_gap = evaluation_results["Random Forest"]["generalization_gap_accuracy"]
+    rf_train_f1 = evaluation_results["Random Forest"]["train_f1_macro"]
+    
+    dt_train_acc = evaluation_results["Decision Tree"]["train_accuracy"]
+    dt_test_acc = evaluation_results["Decision Tree"]["test_accuracy"]
+    dt_f1 = evaluation_results["Decision Tree"]["f1_macro"]
+    dt_f1_weighted = evaluation_results["Decision Tree"]["f1_weighted"]
+    dt_roc_auc = evaluation_results["Decision Tree"]["roc_auc_ovr_macro"]
+    dt_gap = evaluation_results["Decision Tree"]["generalization_gap_accuracy"]
+    dt_train_f1 = evaluation_results["Decision Tree"]["train_f1_macro"]
+    
+    # Extract dynamic feature importances
+    top_feats = feature_importance_df.sort_values("Importance", ascending=False).reset_index(drop=True)
+    feat_top1_name = str(top_feats.iloc[0]["Feature"])
+    feat_top1_val = float(top_feats.iloc[0]["Importance"])
+    feat_top2_name = str(top_feats.iloc[1]["Feature"])
+    feat_top2_val = float(top_feats.iloc[1]["Importance"])
+    feat_top3_name = str(top_feats.iloc[2]["Feature"])
+    feat_top3_val = float(top_feats.iloc[2]["Importance"])
+    feat_top4_name = str(top_feats.iloc[3]["Feature"])
+    feat_top4_val = float(top_feats.iloc[3]["Importance"])
+    top4_cum_pct = float(top_feats.iloc[:4]["Importance"].sum() * 100)
+    
+    feat_low1_name = str(top_feats.iloc[-1]["Feature"])
+    feat_low1_val = float(top_feats.iloc[-1]["Importance"])
+    feat_low2_name = str(top_feats.iloc[-2]["Feature"])
+    feat_low2_val = float(top_feats.iloc[-2]["Importance"])
+
     # Title Block
     p_title = doc.add_paragraph()
     format_paragraph(p_title, space_before=0, space_after=4)
@@ -224,7 +267,7 @@ def generate_word_report(
     
     p_subtitle = doc.add_paragraph()
     format_paragraph(p_subtitle, space_before=0, space_after=14)
-    r_sub = p_subtitle.add_run("A Rigorous Multiclass Classification Study on Physicochemical Wine Cultivar Fingerprints")
+    r_sub = p_subtitle.add_run("A Multiclass Classification Study on Physicochemical Wine Cultivar Fingerprints")
     r_sub.font.name = "Arial"
     r_sub.font.size = Pt(12)
     r_sub.font.color.rgb = RGBColor(74, 85, 104)
@@ -241,35 +284,29 @@ def generate_word_report(
         "The primary analytical objective is to determine whether 13 chemical and physical measurements derived from Italian wines "
         "can reliably classify their cultivar of origin (cultivars 0, 1, and 2, corresponding to Barolo, Grignolino, and Barbera). "
         "The experimental pipeline incorporates data hygiene inspection, stratified train-test partitioning (80/20 split, random_state=42), "
-        "leakage-free standard feature scaling encapsulated inside scikit-learn Pipelines, and rigorous multiclass evaluation."
+        "leakage-free standard feature scaling encapsulated inside scikit-learn Pipelines, and comprehensive multiclass evaluation."
     )
     
     p_exec2 = doc.add_paragraph()
     format_paragraph(p_exec2, space_before=0, space_after=8)
-    lr_test_acc = evaluation_results["Logistic Regression"]["test_accuracy"]
-    rf_test_acc = evaluation_results["Random Forest"]["test_accuracy"]
-    dt_test_acc = evaluation_results["Decision Tree"]["test_accuracy"]
-    
-    lr_f1 = evaluation_results["Logistic Regression"]["f1_macro"]
-    rf_f1 = evaluation_results["Random Forest"]["f1_macro"]
-    dt_f1 = evaluation_results["Decision Tree"]["f1_macro"]
-    
     p_exec2.add_run(
-        f"Three candidate classification algorithms representing distinct inductive biases were implemented: "
+        f"Three candidate classification algorithms were evaluated: "
         f"Logistic Regression (multinomial linear baseline with L2 regularization), Random Forest (ensemble bagging of 100 trees), "
         f"and Decision Tree (single non-linear CART baseline). On the held-out test set (N = 36), the Random Forest model achieved "
-        f"flawless performance ({rf_test_acc * 100:.1f}% accuracy, Macro F1 = {rf_f1:.4f}, One-vs-Rest Macro ROC-AUC = 1.0000). "
-        f"Logistic Regression attained {lr_test_acc * 100:.2f}% accuracy (Macro F1 = {lr_f1:.4f}, ROC-AUC = 1.0000) with exactly one "
-        f"borderline misclassification. The single Decision Tree attained {dt_test_acc * 100:.2f}% accuracy (Macro F1 = {dt_f1:.4f}, ROC-AUC = 0.9493) "
-        f"with two misclassifications due to rigid orthogonal decision boundaries. Based on empirical generalization, variance resistance, and multiclass separation, "
-        f"Random Forest is selected as the primary champion model, with standardized Logistic Regression serving as an exceptional, highly interpretable alternative."
+        f"{rf_test_acc * 100:.1f}% test accuracy (Macro F1 = {rf_f1:.4f}, One-vs-Rest Macro ROC-AUC = {rf_roc_auc:.4f}). "
+        f"Logistic Regression attained {lr_test_acc * 100:.2f}% accuracy (Macro F1 = {lr_f1:.4f}, ROC-AUC = {lr_roc_auc:.4f}) with one "
+        f"misclassification at the default threshold. The perfect ROC-AUC indicates that Logistic Regression ranked the true-class probabilities correctly "
+        f"across classification thresholds, while the single classification error at the default decision threshold resulted in 97.22% accuracy. "
+        f"The single Decision Tree attained {dt_test_acc * 100:.2f}% accuracy (Macro F1 = {dt_f1:.4f}, ROC-AUC = {dt_roc_auc:.4f}) "
+        f"with two misclassifications due to rigid orthogonal decision boundaries. Based on empirical test performance in this experiment, "
+        f"Random Forest is selected as the champion model, with standardized Logistic Regression serving as an interpretable linear alternative."
     )
     
     add_callout(
         doc,
-        f"Random Forest achieved 100% test accuracy and 1.0000 Macro F1 with zero generalization gap. "
-        f"Standardized Logistic Regression achieved 97.22% test accuracy with 1.0000 ROC-AUC. Both models successfully demonstrate "
-        f"that physicochemical attributes provide highly separable chemical signatures for cultivar discrimination.",
+        f"Random Forest achieved {rf_test_acc * 100:.1f}% test accuracy and {rf_f1:.4f} Macro F1 on the held-out test split (N = 36). "
+        f"Standardized Logistic Regression achieved {lr_test_acc * 100:.2f}% test accuracy with {lr_roc_auc:.4f} ROC-AUC. Both models demonstrate "
+        f"that physicochemical attributes provide strong predictive signal for wine cultivar classification.",
         title="EXECUTIVE SUMMARY TAKEAWAY"
     )
     
@@ -278,13 +315,13 @@ def generate_word_report(
     p_intro = doc.add_paragraph()
     format_paragraph(p_intro)
     p_intro.add_run(
-        "Automated cultivar identification and chemical fingerprinting are vital pillars in enology, agricultural economics, "
+        "Automated cultivar identification and chemical fingerprinting are important techniques in enology, agricultural quality control, "
         "and food authentication. Regional wines command distinct commercial valuations and regulatory designations based on cultivar origin. "
-        "However, traditional sensory profiling is subjective, labor-intensive, and susceptible to cognitive bias. Machine learning provides "
-        "a principled, data-driven framework to map continuous physicochemical assays directly to cultivar classifications.\n\n"
-        "This project establishes an academic data science workflow adhering to modern reproducibility principles. "
+        "However, traditional sensory profiling can be subjective and labor-intensive. Machine learning provides "
+        "a structured, data-driven framework to map continuous physicochemical measurements directly to cultivar classifications.\n\n"
+        "This project establishes a reproducible machine learning workflow. "
         "The study systematically progresses from data verification and pipeline construction through baseline modeling, "
-        "ensemble comparison, multiclass evaluation, error diagnosis, and deployment readiness analysis."
+        "tree-based comparison, multiclass evaluation, error diagnosis, and future improvement strategies."
     )
     
     # 2. Problem Definition
@@ -299,7 +336,7 @@ def generate_word_report(
         "• Input Space (X): 13 continuous physicochemical attributes spanning alcohol content, organic acid levels, ash components, "
         "polyphenolic profiles (phenols, flavanoids, nonflavanoids, proanthocyanins), colorimetric properties (intensity, hue), spectrophotometric absorbance ratios, and amino acid content (proline).\n"
         "• Target Space (Y): Discrete multiclass label y in {0, 1, 2} corresponding to three cultivars: Class 0 (Barolo), Class 1 (Grignolino), and Class 2 (Barbera).\n"
-        "• Optimization Objective: Learn a parameterized classification function f: X -> Y that maximizes out-of-sample generalization accuracy and macro-averaged F1-score while maintaining robust multiclass discrimination across all classes."
+        "• Optimization Objective: Learn a parameterized classification function f: X -> Y that maximizes out-of-sample generalization accuracy and macro-averaged F1-score while maintaining balanced performance across all classes."
     )
     
     # 3. Dataset Description
@@ -315,9 +352,9 @@ def generate_word_report(
         f"• Class 1 (Grignolino): {inspection_summary['target_distribution'][1]} observations ({inspection_summary['target_proportions'][1]*100:.1f}%)\n"
         f"• Class 2 (Barbera): {inspection_summary['target_distribution'][2]} observations ({inspection_summary['target_proportions'][2]*100:.1f}%)\n\n"
         f"Dataset Appropriateness:\n"
-        f"This dataset is uniquely suited for machine learning benchmarking because it presents a multi-dimensional continuous feature space "
-        f"exhibiting varying scales, significant biological correlations, and mild class imbalance. It provides an ideal testbed for evaluating "
-        f"scale-sensitive linear models (Logistic Regression) against scale-invariant tree ensembles (Random Forest), testing pipeline data-leakage prevention, "
+        f"This dataset is well suited for machine learning benchmarking because it presents a multi-dimensional continuous feature space "
+        f"exhibiting varying scales, natural correlations, and mild class imbalance. It provides a practical setting for evaluating "
+        f"scale-sensitive linear models (Logistic Regression) against scale-invariant tree models (Random Forest), testing pipeline data-leakage prevention, "
         f"and conducting multiclass One-vs-Rest ROC diagnostics."
     )
     
@@ -379,16 +416,16 @@ def generate_word_report(
     p_dp = doc.add_paragraph()
     format_paragraph(p_dp)
     p_dp.add_run(
-        "A rigorous preprocessing protocol was executed to maintain experimental integrity and eliminate data leakage:\n\n"
+        "A structured preprocessing protocol was executed to maintain experimental integrity and eliminate data leakage:\n\n"
         "1. Data Quality Inspection: The raw dataset was inspected for structural anomalies. Exactly 0 missing values and 0 duplicate rows "
         "were identified across all 178 records. All 13 predictor columns are floating-point continuous values.\n\n"
         "2. Train/Test Stratification: The dataset was partitioned into a training set (80%, N = 142) and a held-out test set (20%, N = 36) "
-        "using stratified sampling with a deterministic seed (random_state = 42). Stratification guarantees that the class proportions "
-        "(Class 0: ~33.1%, Class 1: ~39.9%, Class 2: ~27.0%) are preserved identically in both training (47, 57, 38 samples) and test (12, 14, 10 samples) splits.\n\n"
+        "using stratified sampling with a fixed seed (random_state = 42). Stratification guarantees that the class proportions "
+        "(Class 0: ~33.1%, Class 1: ~39.9%, Class 2: ~27.0%) are preserved in both training (47, 57, 38 samples) and test (12, 14, 10 samples) splits.\n\n"
         "3. Feature Scaling & Leakage Prevention: Features exhibit disparate numerical ranges (e.g., nonflavanoid phenols range from 0.13 to 0.66 g/L, "
-        "whereas proline ranges from 278 to 1680 mg/L). Without scaling, gradient-based and distance-sensitive classifiers would place disproportionate "
-        "weight on high-magnitude features. Standard z-score normalization (StandardScaler) was utilized. To strictly eliminate data snooping and information leakage, "
-        "the scaler was encapsulated within a scikit-learn Pipeline, ensuring the mean and standard deviation parameters were fitted solely on training folds "
+        "whereas proline ranges from 278 to 1680 mg/L). Without scaling, linear models would place disproportionate "
+        "weight on higher-magnitude features. Standard z-score normalization (StandardScaler) was utilized. To prevent data leakage, "
+        "the scaler was encapsulated within a scikit-learn Pipeline, ensuring scaling parameters were fitted solely on training data "
         "and applied downstream to test samples without prior exposure."
     )
     
@@ -397,15 +434,15 @@ def generate_word_report(
     p_ms = doc.add_paragraph()
     format_paragraph(p_ms)
     p_ms.add_run(
-        "Three classification algorithms spanning diverse mathematical paradigms were selected for empirical benchmarking:\n\n"
+        "Three classification algorithms representing different modeling paradigms were selected for benchmarking:\n\n"
         "1. Logistic Regression (Primary Baseline): A multinomial linear classifier utilizing the softmax link function and L2 weight penalty. "
-        "Logistic Regression models the log-odds of each class as a linear combination of standardized features. It serves as the primary scientific baseline "
+        "Logistic Regression models the log-odds of each class as a linear combination of standardized features. It serves as the primary baseline "
         "to test whether linear decision boundaries in standardized space are sufficient to separate the three cultivars.\n\n"
         "2. Random Forest Classifier (Non-linear Ensemble): A bagging ensemble composed of 100 de-correlated classification trees with bootstrap aggregation "
-        "and randomized feature subsets at each split (max_depth = 4). Random Forest provides expressive non-linear decision surfaces, resistance to overfitting, "
-        "invariance to monotonic feature scaling, and native feature importance extraction via Mean Decrease in Impurity (MDI).\n\n"
+        "and randomized feature subsets at each split (max_depth = 4). Random Forest provides non-linear decision surfaces, resistance to individual tree variance, "
+        "invariance to monotonic feature scaling, and feature importance estimation via Mean Decrease in Impurity (MDI).\n\n"
         "3. Decision Tree Classifier (Single Non-linear Tree): A single recursive binary partitioning CART model (max_depth = 3, Gini impurity criterion). "
-        "It provides intuitive rule-based interpretability but is known to suffer from high sample variance and rigid orthogonal decision boundaries."
+        "It provides intuitive rule-based interpretability but can be sensitive to sample variance and rigid orthogonal decision boundaries."
     )
     
     # 6. Model Training
@@ -414,10 +451,10 @@ def generate_word_report(
     format_paragraph(p_tr)
     p_tr.add_run(
         "Model training was executed deterministically on the 142-sample training split. "
-        "For Logistic Regression, optimization was performed using the L-BFGS quasi-Newton solver with a maximum iteration limit of 1000 and default inverse regularization parameter C = 1.0. "
+        "For Logistic Regression, optimization was performed using the L-BFGS solver with a maximum iteration limit of 1000 and default inverse regularization parameter C = 1.0. "
         "For Random Forest, an ensemble of 100 estimators was initialized with max_depth = 4 to balance expressive capacity and variance control. "
-        "For Decision Tree, max_depth = 3 was enforced to prevent deep leaf isolation. "
-        "All models utilized random_state = 42 for exact execution reproducibility."
+        "For Decision Tree, max_depth = 3 was used to avoid over-splitting small leaves. "
+        "All models used random_state = 42 for exact execution reproducibility."
     )
     
     # 7. Evaluation Methodology
@@ -425,15 +462,15 @@ def generate_word_report(
     p_em = doc.add_paragraph()
     format_paragraph(p_em)
     p_em.add_run(
-        "To ensure robust academic evaluation across multiple classes, the following metrics and diagnostic tools were computed:\n\n"
+        "To evaluate model performance across multiple classes, the following metrics and diagnostic tools were computed:\n\n"
         "• Accuracy: The global ratio of correctly classified test samples to total test instances.\n"
-        "• Macro-Averaged Precision: The unweighted arithmetic mean of precision across all three classes, giving equal weight to each cultivar regardless of support.\n"
-        "• Macro-Averaged Recall: The unweighted mean of class sensitivity (True Positive Rate), assessing the model's ability to detect each cultivar.\n"
-        "• Macro-Averaged F1-Score: The harmonic mean of macro precision and macro recall, representing the primary benchmark metric for balanced multi-class performance.\n"
+        "• Macro-Averaged Precision: The unweighted arithmetic mean of precision across all three classes, giving equal weight to each cultivar.\n"
+        "• Macro-Averaged Recall: The unweighted mean of class sensitivity (True Positive Rate), assessing detection capability across classes.\n"
+        "• Macro-Averaged F1-Score: The harmonic mean of macro precision and macro recall, representing balanced multi-class performance.\n"
         "• Weighted F1-Score: Support-weighted harmonic mean accounting for slight class sample count differences.\n"
         "• Confusion Matrix: A 3x3 contingency matrix cross-tabulating actual versus predicted class memberships to reveal specific off-diagonal error patterns.\n"
         "• Multiclass One-vs-Rest (OvR) ROC & AUC: Binarizing the 3-class target into three distinct binary classification problems (Class k vs. Rest), computing the False Positive Rate versus True Positive Rate across probability thresholds, and reporting per-class and macro-average Area Under the ROC Curve.\n"
-        "• Generalization Gap Analysis: Quantifying Delta = (Train Metric - Test Metric) to empirically detect overfitting or underfitting."
+        "• Generalization Gap Analysis: Quantifying Delta = (Train Metric - Test Metric) to evaluate training versus test performance."
     )
     
     # 8. Results
@@ -441,8 +478,12 @@ def generate_word_report(
     p_res = doc.add_paragraph()
     format_paragraph(p_res)
     p_res.add_run(
-        "The empirical performance of all three trained pipelines on the training set (N = 142) and held-out test set (N = 36) "
-        "is summarized in Table 3. Detailed per-class precision, recall, and F1 metrics for the final models are provided in Table 4."
+        f"The empirical performance of all three trained pipelines on the training set (N = 142) and held-out test set (N = 36) "
+        f"is summarized in Table 3. Detailed per-class precision, recall, and F1 metrics are provided in Table 4.\n\n"
+        f"For Logistic Regression, the test accuracy was {lr_test_acc * 100:.2f}% (Macro F1 = {lr_f1:.4f}) and the Macro ROC-AUC was {lr_roc_auc:.4f}. "
+        f"The perfect ROC-AUC indicates that the model ranked the true-class probabilities correctly across classification thresholds, "
+        f"while the single classification error at the default decision threshold resulted in {lr_test_acc * 100:.2f}% accuracy. "
+        f"This demonstrates that ROC-AUC evaluates threshold-independent ranking discrimination, whereas classification accuracy measures discrete decisions at a fixed probability threshold."
     )
     
     # Table 3: Model Performance Comparison
@@ -500,7 +541,7 @@ def generate_word_report(
     p_ve = doc.add_paragraph()
     format_paragraph(p_ve)
     p_ve.add_run(
-        "Four dedicated publication-grade visualizations were generated to analyze model decision behavior, "
+        "Four dedicated visualizations were generated to analyze model decision behavior, "
         "multiclass separation, calibration, and feature attribution. Each figure is displayed below with its technical interpretation."
     )
     
@@ -530,32 +571,34 @@ def generate_word_report(
     embed_figure(
         figures_paths.get("figure1", Path("")),
         "Figure 1: Confusion Matrix for the Final Random Forest Model (Test Set, N = 36).",
-        "The heatmap displays a perfect diagonal structure with 12/12 Class 0, 14/14 Class 1, and 10/10 Class 2 instances correctly classified. "
-        "Zero off-diagonal errors were produced, demonstrating complete separability of the test samples across all three cultivars under the bagging ensemble.",
+        "The heatmap displays a diagonal structure with 12/12 Class 0, 14/14 Class 1, and 10/10 Class 2 instances correctly classified. "
+        "Zero off-diagonal errors were produced on this test split, demonstrating strong class separation across all three cultivars under the bagging ensemble.",
         width_in=4.8
     )
     
     embed_figure(
         figures_paths.get("figure2", Path("")),
         "Figure 2: Cross-Model Metric Comparison across Train and Test Partitions.",
-        "Random Forest achieves 1.000 across all training and test metrics. Logistic Regression demonstrates robust generalization (0.972 test accuracy, 0.971 F1), "
-        "closely trailing Random Forest. Decision Tree displays a measurable generalization drop (0.993 train vs. 0.944 test accuracy), illustrating the higher variance inherent in unregularized single-tree models.",
+        f"Random Forest achieved {rf_test_acc:.3f} across test metrics on this partition. Logistic Regression showed strong generalization ({lr_test_acc:.3f} test accuracy, {lr_f1:.3f} F1). "
+        f"Decision Tree displayed a measurable generalization drop ({dt_train_acc:.3f} train vs. {dt_test_acc:.3f} test accuracy, gap = {dt_gap * 100:+.2f}%), illustrating the higher variance typical of unregularized single-tree models.",
         width_in=5.4
     )
     
     embed_figure(
         figures_paths.get("figure3", Path("")),
         "Figure 3: Multiclass One-vs-Rest ROC Curves for Logistic Regression Baseline.",
-        "The One-vs-Rest ROC analysis yields an Area Under the Curve (AUC) of 1.0000 for Class 0, Class 1, and Class 2, achieving a perfect Macro-Average ROC-AUC of 1.0000. "
-        "This confirms that the predicted class probability distributions provide flawless rank-order discrimination across varying classification thresholds.",
+        f"The One-vs-Rest ROC analysis yields an Area Under the Curve (AUC) of {lr_roc_auc:.4f} across classes, achieving a Macro-Average ROC-AUC of {lr_roc_auc:.4f}. "
+        f"The perfect ROC-AUC indicates that the model ranked the true-class probabilities correctly across classification thresholds, while the single classification error at the default decision threshold resulted in {lr_test_acc * 100:.2f}% accuracy. "
+        f"This illustrates that ROC-AUC evaluates threshold-independent ranking discrimination, whereas classification accuracy measures discrete decisions at a fixed threshold.",
         width_in=5.0
     )
     
     embed_figure(
         figures_paths.get("figure4", Path("")),
         "Figure 4: Random Forest Feature Importance (Mean Decrease in Impurity).",
-        "Proline (0.198), Flavanoids (0.174), Color Intensity (0.161), and OD280/OD315 of diluted wines (0.126) constitute the top 4 most informative features, "
-        "accounting for over 65% of aggregate split impurity reduction. Conversely, Ash (0.009) and Nonflavanoid Phenols (0.012) provide minimal discriminatory utility.",
+        f"{feat_top1_name} ({feat_top1_val:.3f}), {feat_top2_name} ({feat_top2_val:.3f}), {feat_top3_name} ({feat_top3_val:.3f}), and {feat_top4_name} ({feat_top4_val:.3f}) constitute the top 4 most influential features in the Random Forest model, "
+        f"accounting for {top4_cum_pct:.1f}% of aggregate split impurity reduction. Conversely, {feat_low2_name} ({feat_low2_val:.3f}) and {feat_low1_name} ({feat_low1_val:.3f}) provide the lowest relative split contributions. "
+        f"The feature-importance ranking identifies variables that contributed strongly to the Random Forest's decision structure. These rankings represent model-specific associations and should not be interpreted as evidence of causal biochemical effects.",
         width_in=5.0
     )
     
@@ -564,16 +607,16 @@ def generate_word_report(
     p_ea = doc.add_paragraph()
     format_paragraph(p_ea)
     p_ea.add_run(
-        "A granular examination of model misclassifications reveals important insights into cultivar boundary overlap:\n\n"
-        "1. Random Forest Error Inspection: The Random Forest ensemble produced zero errors (0/36) on the test split, achieving 100% precision and recall across all three classes.\n\n"
+        "A detailed examination of model predictions reveals specific error patterns:\n\n"
+        "1. Random Forest Error Inspection: The Random Forest ensemble produced zero errors (0/36) on the held-out test split, achieving 100% precision and recall across all three classes in this experiment.\n\n"
         "2. Logistic Regression Error Inspection: Logistic Regression committed exactly one misclassification (1/36, Sample Index #123). "
-        "A ground-truth Class 2 (Barbera) sample was classified as Class 1 (Grignolino). Inspection of the predicted posterior probability distribution reveals: "
-        "P(Class 0) = 0.0012, P(Class 1) = 0.5843, P(Class 2) = 0.4145. This observation lies directly on the linear hyperplane boundary between Class 1 and Class 2, "
-        "exhibiting an intermediate flavanoid level (1.20 g/L) and lower color intensity (5.00) than typical Class 2 samples.\n\n"
+        "A ground-truth Class 2 (Barbera) sample was predicted as Class 1 (Grignolino). Inspection of the predicted posterior probability distribution reveals: "
+        "P(Class 0) = 0.0012, P(Class 1) = 0.5843, P(Class 2) = 0.4145. This observation lies near the linear decision boundary between Class 1 and Class 2, "
+        "exhibiting an intermediate flavanoid measurement (1.20 g/L) and lower color intensity (5.00) relative to typical Class 2 samples.\n\n"
         "3. Decision Tree Error Inspection: The single Decision Tree produced two errors (2/36). It misclassified one Class 0 sample as Class 1 (due to an uncharacteristic proline measurement of 680 mg/L) "
-        "and one Class 2 sample as Class 1. This demonstrates the primary vulnerability of single decision trees: axis-aligned orthogonal partitions cannot adapt smoothly to diagonal correlation structures among phenolic compounds.\n\n"
-        "4. Class Imbalance Impact: The mild class imbalance (Class 0: 33.1%, Class 1: 39.9%, Class 2: 27.0%) did not induce pathological majority-class bias. "
-        "Stratified sampling successfully maintained representative class proportions."
+        "and one Class 2 sample as Class 1. This illustrates how axis-aligned orthogonal partitions can struggle near overlapping regional boundaries.\n\n"
+        "4. Class Imbalance Impact: The mild class imbalance (Class 0: 33.1%, Class 1: 39.9%, Class 2: 27.0%) did not induce majority-class bias. "
+        "Stratified sampling preserved representative class proportions across partitions."
     )
     
     # 11. Overfitting and Underfitting
@@ -581,16 +624,19 @@ def generate_word_report(
     p_ou = doc.add_paragraph()
     format_paragraph(p_ou)
     p_ou.add_run(
-        "Overfitting and underfitting were systematically evaluated by contrasting training performance against held-out test performance:\n\n"
-        "• Underfitting Assessment: None of the candidate models exhibited signs of underfitting. Training accuracies ranged from 99.30% (Decision Tree) "
-        "to 100.0% (Logistic Regression and Random Forest), confirming that all architectures possess adequate expressive capacity to capture the underlying physicochemical signals.\n\n"
-        "• Overfitting Assessment: \n"
-        "  - Decision Tree: Exhibited measurable overfitting with a generalization gap of Delta = +4.86% (Train Acc = 99.30%, Test Acc = 94.44%; Train F1 = 0.9930, Test F1 = 0.9457). "
-        "The single tree overfit to specific training split thresholds on proline and flavanoids.\n"
-        "  - Logistic Regression: Demonstrated minimal generalization variance with a small gap of Delta = +2.78% (Train Acc = 100.0%, Test Acc = 97.22%; Train F1 = 1.000, Test F1 = 0.9710). "
-        "The L2 weight penalty effectively controlled parameter magnitude.\n"
-        "  - Random Forest: Exhibited zero generalization gap (Train Acc = 100.0%, Test Acc = 100.0%; Train F1 = 1.000, Test F1 = 1.000). "
-        "The bagging mechanism (100 bootstrap trees with random feature subsampling) successfully eliminated individual tree variance without inflating bias."
+        "Overfitting and underfitting were evaluated by comparing training performance against held-out test performance:\n\n"
+        "• Underfitting Assessment: No clear evidence of underfitting was observed based on the training and test performance in this experiment. "
+        f"Training accuracies ranged from {dt_train_acc * 100:.2f}% (Decision Tree) to {rf_train_acc * 100:.1f}% (Logistic Regression and Random Forest), "
+        "indicating that the candidate models had sufficient expressive capacity to learn the classification patterns in the training data.\n\n"
+        "• Overfitting Assessment:\n"
+        f"  - Decision Tree: The Decision Tree showed a noticeable generalization gap of Delta = {dt_gap * 100:+.2f}% "
+        f"(Train Acc = {dt_train_acc * 100:.2f}%, Test Acc = {dt_test_acc * 100:.2f}%; Train F1 = {dt_train_f1:.4f}, Test F1 = {dt_f1:.4f}), "
+        "reflecting the variance typical of unregularized single tree models on small sample splits.\n"
+        f"  - Logistic Regression: Logistic Regression demonstrated stable performance with a modest generalization gap of Delta = {lr_gap * 100:+.2f}% "
+        f"(Train Acc = {lr_train_acc * 100:.2f}%, Test Acc = {lr_test_acc * 100:.2f}%; Train F1 = {lr_train_f1:.4f}, Test F1 = {lr_f1:.4f}). "
+        "The L2 weight penalty controlled parameter magnitude.\n"
+        f"  - Random Forest: The Random Forest showed no observed train-test accuracy gap on this fixed split (Train Acc = {rf_train_acc * 100:.1f}%, Test Acc = {rf_test_acc * 100:.1f}%), "
+        "suggesting strong generalization in this experiment. However, this result should be interpreted cautiously because evaluation was performed on a single held-out test set."
     )
     
     # 12. Model Comparison
@@ -598,13 +644,13 @@ def generate_word_report(
     p_mc = doc.add_paragraph()
     format_paragraph(p_mc)
     p_mc.add_run(
-        "A holistic comparative synthesis across algorithmic families reveals clear trade-offs between predictive accuracy, variance control, and interpretability:\n\n"
-        "• Logistic Regression vs. Tree Ensembles: Logistic Regression provides closed-form interpretability through standardized regression coefficients and well-calibrated posterior probabilities. "
-        "However, it relies on the assumption of linearly separable class distributions. Random Forest relaxes linear assumptions by aggregating non-linear piecewise step functions, "
-        "capturing complex multi-feature interactions (such as the ratio between flavanoids and color intensity) that linear boundaries cannot represent without explicit polynomial feature engineering.\n\n"
-        "• Single Decision Tree vs. Random Forest: The single Decision Tree is computationally lightweight and produces explicit if-then decision rules. "
-        "However, its empirical test score (0.9444 accuracy, 0.9457 F1) lags significantly behind Random Forest (1.0000 accuracy, 1.0000 F1). "
-        "Averaging across 100 randomized trees effectively smooths the jagged decision boundaries of single CART models, resulting in superior generalization."
+        "Comparing the candidate algorithms highlights key trade-offs between predictive performance, variance, and interpretability:\n\n"
+        "• Logistic Regression vs. Tree Ensembles: Logistic Regression provides direct coefficient interpretability through standardized regression weights and predicted class probabilities. "
+        "However, it relies on linear decision boundaries in feature space. Random Forest aggregates multiple decision trees to capture non-linear interactions "
+        "(such as relationships between flavanoids and color intensity) without requiring manual interaction terms.\n\n"
+        "• Single Decision Tree vs. Random Forest: The single Decision Tree is simple and produces clear if-then rules. "
+        f"However, its empirical test score ({dt_test_acc * 100:.2f}% accuracy, {dt_f1:.4f} F1) was lower than Random Forest ({rf_test_acc * 100:.1f}% accuracy, {rf_f1:.4f} F1). "
+        "Averaging across 100 randomized trees reduced individual tree variance and improved test performance."
     )
     
     # 13. Final Model Selection
@@ -614,12 +660,15 @@ def generate_word_report(
     p_fs.add_run(
         "Final Champion Selection: Random Forest Classifier\n\n"
         "Justification:\n"
-        "1. Superior Test Performance: Random Forest achieved perfect test accuracy (100.0%), Macro Precision (1.0000), Macro Recall (1.0000), and Macro F1-Score (1.0000) on unseen test data.\n"
-        "2. Variance Control: By ensembling 100 decorrelated trees with bootstrap aggregation, Random Forest eliminates the variance observed in single decision trees and prevents overfitting.\n"
-        "3. Robustness to Scale & Outliers: Random Forest is natively invariant to monotonic feature scaling and robust to extreme chemical concentration outliers.\n"
-        "4. Practical Utility: The model provides intrinsic feature importance rankings (Figure 4), offering actionable biochemical insights to enologists regarding the primary discriminants of cultivar identity (proline, flavanoids, color intensity).\n\n"
-        "Alternative Deployment Candidate: Standardized Logistic Regression represents a highly credible, lightweight production alternative (97.22% test accuracy, 1.0000 ROC-AUC) "
-        "when ultra-fast inference latency and closed-form linear coefficients are required."
+        f"1. Test Performance: Random Forest was selected as the champion model for this experiment because it achieved the strongest held-out test performance among the evaluated models "
+        f"({rf_test_acc * 100:.1f}% accuracy, Macro F1 = {rf_f1:.4f}, ROC-AUC = {rf_roc_auc:.4f}). This conclusion is specific to the dataset and evaluation protocol used in this study. "
+        f"While the model attained 100% accuracy on the test set, this evaluation split contains 36 observations, so performance should be validated across broader sampling in future work.\n"
+        "2. Variance Control: By ensembling 100 decorrelated trees with bootstrap aggregation, Random Forest reduced the variance observed in the single decision tree.\n"
+        "3. Scale Invariance: Random Forest is natively invariant to monotonic feature scaling and robust to feature magnitude differences.\n"
+        "4. Feature Attribution: The feature-importance ranking identifies variables that contributed strongly to the Random Forest's decision structure. "
+        "These rankings represent model-specific associations and should not be interpreted as evidence of causal biochemical effects.\n\n"
+        f"Alternative Candidate: Standardized Logistic Regression represents a strong, interpretable alternative ({lr_test_acc * 100:.2f}% test accuracy, {lr_roc_auc:.4f} ROC-AUC) "
+        "when simple linear coefficients and fast inference are desired."
     )
     
     # 14. Limitations
@@ -627,14 +676,14 @@ def generate_word_report(
     p_lim = doc.add_paragraph()
     format_paragraph(p_lim)
     p_lim.add_run(
-        "The findings of this study must be evaluated within the context of several structural limitations:\n\n"
-        "1. Sample Size Constraint: The dataset contains 178 total observations (36 test samples). While standard in academic benchmarking, "
-        "the small sample size increases confidence interval widths and necessitates cautious interpretation of 100% test accuracy scores.\n\n"
-        "2. Single Geographic Region: All wine samples originate from the same geographical growing area in Italy (Piedmont). "
-        "The model may not generalize directly to identical cultivars cultivated in different soil terroirs, microclimates, or winemaking traditions.\n\n"
-        "3. Temporal / Vintage Invariance: The dataset does not include longitudinal multi-vintage time series data. "
-        "Variations in annual precipitation and harvest temperatures could shift baseline phenolic concentrations, requiring periodic recalibration.\n\n"
-        "4. Fixed Train/Test Partition: Although stratified, evaluation on a single fixed 80/20 train/test split could be sensitive to specific random state seeding."
+        "The findings of this study should be evaluated within the context of several limitations:\n\n"
+        "1. Sample Size Constraint: The dataset contains 178 total observations (36 test samples). While standard for benchmarking, "
+        "the small sample size increases confidence interval widths, and 100% test accuracy on 36 samples should not be assumed to guarantee error-free performance on new datasets.\n\n"
+        "2. Single Geographic Region: All wine samples originate from the Piedmont region in Italy. "
+        "The model may not generalize directly to identical cultivars cultivated in different soil types, climates, or winemaking processes.\n\n"
+        "3. Temporal Invariance: The dataset does not include longitudinal multi-vintage time series data. "
+        "Annual weather differences can alter phenolic concentrations, which may require periodic recalibration.\n\n"
+        "4. Fixed Partition: Although stratified, evaluation on a single 80/20 train/test split could be sensitive to the chosen random seed."
     )
     
     # 15. Improvement Strategies
@@ -642,16 +691,16 @@ def generate_word_report(
     p_imp = doc.add_paragraph()
     format_paragraph(p_imp)
     p_imp.add_run(
-        "To elevate the current baseline pipeline toward enterprise-grade robustness, the following future research and engineering enhancements are proposed:\n\n"
-        "1. Nested Stratified Cross-Validation: Implementing 5x5 nested Stratified K-Fold cross-validation will provide unbiased variance estimates "
-        "and empirical confidence intervals across multiple randomized dataset partitions.\n\n"
-        "2. Hyperparameter Optimization: Conducting systematic Bayesian optimization or GridSearchCV over Random Forest hyperparameters "
-        "(e.g., min_samples_split, min_samples_leaf, max_features, criterion) and Logistic Regression regularization strength (C in logspace).\n\n"
-        "3. Dimensionality Reduction & Feature Selection: Applying Principal Component Analysis (PCA) or Recursive Feature Elimination (RFE) to isolate the top 5 most discriminant features "
-        "(Proline, Flavanoids, Color Intensity, OD280/OD315, Alcohol), thereby reducing lab assay costs without sacrificing classification accuracy.\n\n"
-        "4. Advanced Ensemble & Non-Linear Architectures: Benchmarking Gradient Boosted Decision Trees (XGBoost, LightGBM) and Support Vector Machines (SVM with RBF kernel) "
-        "on expanded multi-vintage wine collections.\n\n"
-        "5. External Dataset Validation: Validating model inference on international wine databases from diverse global appellations."
+        "To provide further experimental robustness beyond the current baseline pipeline, the following future research and engineering enhancements are proposed:\n\n"
+        "1. Stratified Cross-Validation: Implementing repeated Stratified K-Fold cross-validation will provide more comprehensive variance estimates "
+        "across multiple dataset partitions.\n\n"
+        "2. Hyperparameter Optimization: Conducting systematic search (such as GridSearchCV or RandomizedSearchCV) over Random Forest parameters "
+        "(e.g., min_samples_split, max_features, criterion) and Logistic Regression regularization strength (C).\n\n"
+        f"3. Feature Selection: Utilizing feature importance rankings ({feat_top1_name}, {feat_top2_name}, {feat_top3_name}, {feat_top4_name}) or Recursive Feature Elimination (RFE) to identify compact feature subsets, "
+        "potentially reducing laboratory measurement requirements without major loss in accuracy.\n\n"
+        "4. Additional Algorithm Benchmarking: Testing algorithms such as Gradient Boosting or Support Vector Machines (SVM with RBF kernel) "
+        "on expanded datasets.\n\n"
+        "5. External Dataset Validation: Testing model generalization on wine datasets collected from different wine-growing regions."
     )
     
     # 16. Conclusion
@@ -659,12 +708,12 @@ def generate_word_report(
     p_concl = doc.add_paragraph()
     format_paragraph(p_concl)
     p_concl.add_run(
-        "This project successfully designed, implemented, and validated a reproducible multiclass machine learning pipeline "
-        "for wine cultivar classification. The experimental results demonstrate that 13 physicochemical measurements contain distinct, "
-        "highly separable biochemical signatures capable of discriminating Italian wine cultivars with exceptional precision. "
-        "The Random Forest model demonstrated superior classification performance (100% test accuracy, 1.0000 F1-score), "
-        "while Logistic Regression demonstrated outstanding baseline viability (97.22% test accuracy, 1.0000 ROC-AUC). "
-        "The complete codebase and experimental protocol satisfy all modern standards of data hygiene, leakage prevention, and computational reproducibility."
+        "This project successfully developed and evaluated a reproducible machine learning pipeline "
+        "for wine cultivar classification. The experimental results demonstrate that 13 physicochemical measurements provide strong "
+        "predictive signal for classifying Italian wine cultivars. "
+        f"The Random Forest model achieved strong test performance ({rf_test_acc * 100:.1f}% test accuracy, {rf_f1:.4f} F1-score), "
+        f"while Logistic Regression demonstrated effective baseline performance ({lr_test_acc * 100:.2f}% test accuracy, {lr_roc_auc:.4f} ROC-AUC). "
+        "The complete codebase and experimental protocol satisfy standard data science practices of data hygiene, leakage prevention, and computational reproducibility."
     )
     
     # 17. References
